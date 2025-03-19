@@ -8,15 +8,16 @@ roi_coordinates = []
 drawing = False
 frame = None  # Initialize frame variable
 probability = 50
-time_in_cuadrants = [0, 0, 0, 0, 0, 0] 
+time_in_cuadrants = [250, 250, 250, 250, 250, 250]
+goals = [0, 0]
+
 
 # Function to update quadrant time
 def update_quadrant_time(quadrant):
     global time_in_cuadrants
-    global start_time
-    elapsed_time = time.time() - start_time
-    time_in_cuadrants[quadrant] += elapsed_time
-    start_time = time.time()  # Reset the timer
+    
+    
+    time_in_cuadrants[quadrant] += 1
 
 # Function to calculate winning probabilities
 def calculate_win_probabilities(time_in_cuadrants):
@@ -31,9 +32,16 @@ def calculate_win_probabilities(time_in_cuadrants):
     team_b_ponderated = time_in_cuadrants[5] * 0.5 + time_in_cuadrants[3] * 0.5 + time_in_cuadrants[1] * 1
     total_ponderated = team_a_ponderated + team_b_ponderated
 
+    a_modification = 1+1/10*goals[0]-1/10*goals[1]+1/10*goals[0]*goals[0]-1/10*goals[1]*goals[1]
+    b_modification = 1+1/10*goals[1]-1/10*goals[0]+1/10*goals[1]*goals[1]-1/10*goals[0]*goals[0]
+    
+    print(a_modification, b_modification, team_a_ponderated, team_b_ponderated, total_ponderated)
     # Calculate probabilities
-    team_a_prob =  team_a_ponderated/ total_ponderated
-    team_b_prob =  team_b_ponderated/ total_ponderated
+    team_a_prob =  (team_a_ponderated * a_modification / total_ponderated) 
+    team_b_prob =  (team_b_ponderated * b_modification / total_ponderated)
+    
+    
+    print(team_a_prob, team_b_prob, team_a_ponderated * a_modification, team_b_ponderated * b_modification)
 
     return team_a_prob, team_b_prob
 
@@ -49,7 +57,6 @@ def select_roi(event, x, y, flags, param):
         roi_coordinates.append((x, y))  # End point
         cv2.rectangle(frame, roi_coordinates[0], roi_coordinates[1], (0, 255, 0), 2)
         cv2.imshow("Frame", frame)
-        
         
 # Function to detect the purple object
 def detect_purple_object(frame):
@@ -96,7 +103,6 @@ while True:
         x1, y1 = roi_coordinates[0]
         x2, y2 = roi_coordinates[1]
         roi = frame[min(y1, y2):max(y1, y2), min(x1, x2):max(x1, x2)]
-        cv2.imshow("ROI", roi)
 
         # Detect the purple object in the frame
         bbox = detect_purple_object(roi)
@@ -150,15 +156,31 @@ while True:
             team_a_prob, team_b_prob = calculate_win_probabilities(time_in_cuadrants)
             print(f"TEAM A Winning Probability: {team_a_prob * 100:.2f}%")
             print(f"TEAM B Winning Probability: {team_b_prob * 100:.2f}%")
+            
+            print("goals: ", goals)
         
         
 
         
         
         cv2.imshow("Purple Object Detection", roi)
+        #show a screen with the varaibles GOAL, TIME, TEAM_A_PROB AND TEAM_B_PROB withou using cv2.imshow
+        
 
     # Exit if 'q' is pressed
-    if cv2.waitKey(1) & 0xFF == ord('q'):
+    key = cv2.waitKey(1) & 0xFF
+
+    # Cambia la variable `modo` según la tecla presionada
+    if key == ord('1'):
+        goals[0] += 1
+        print("GOAL TEAM A")
+    elif key == ord('2'):
+        goals[1] += 1
+        print("GOAL TEAM B")
+    elif key == ord('0'):
+        goals = [0, 0]
+        print("reset")
+    elif key == ord('q'):
         break
 
 # Release the video capture and close all windows
