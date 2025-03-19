@@ -1,9 +1,41 @@
 import cv2
 import numpy as np
+import time
+
+start_time = time.time()
 
 roi_coordinates = []
 drawing = False
 frame = None  # Initialize frame variable
+probability = 50
+time_in_cuadrants = [0, 0, 0, 0, 0, 0] 
+
+# Function to update quadrant time
+def update_quadrant_time(quadrant):
+    global time_in_cuadrants
+    global start_time
+    elapsed_time = time.time() - start_time
+    time_in_cuadrants[quadrant] += elapsed_time
+    start_time = time.time()  # Reset the timer
+
+# Function to calculate winning probabilities
+def calculate_win_probabilities(time_in_cuadrants):
+    total_time = sum(time_in_cuadrants)
+    if total_time == 0:
+        return 0.5, 0.5  # Default to equal probability if no time has passed
+
+
+    # Calculate ponderated time for each team (1 for forwards, 0.5 for backwards and midfielders)
+    
+    team_a_ponderated = time_in_cuadrants[0] * 0.5 + time_in_cuadrants[2] * 0.5 + time_in_cuadrants[4] * 1
+    team_b_ponderated = time_in_cuadrants[5] * 0.5 + time_in_cuadrants[3] * 0.5 + time_in_cuadrants[1] * 1
+    total_ponderated = team_a_ponderated + team_b_ponderated
+
+    # Calculate probabilities
+    team_a_prob =  team_a_ponderated/ total_ponderated
+    team_b_prob =  team_b_ponderated/ total_ponderated
+
+    return team_a_prob, team_b_prob
 
 def select_roi(event, x, y, flags, param):
     global roi_coordinates, drawing, frame
@@ -73,9 +105,56 @@ while True:
         if bbox:
             x, y, w, h = bbox
             cv2.rectangle(roi, (x, y), (x + w, y + h), (0, 255, 0), 2)  # Green bounding box
-            print("Purple object detected at:", x, y)
+            center = (x + w // 2, y + h // 2)  # Center of the bounding box
+            cv2.circle(roi, center, 2, (0, 255, 0), -1)  # Green dot
+            
+        # Calculate the midpoint of the ROI
+        mid_x = roi.shape[1] // 2  # Middle x-coordinate
+        six_x = roi.shape[1] // 6 # Second x-coordinate
+        mid_y = roi.shape[0] // 2  # Middle y-coordinate
 
-        # Display the frame
+        # Draw a vertical line in the middle of the ROI
+        cv2.line(roi, (mid_x, 0), (mid_x, roi.shape[0]), (255, 0, 0), 2)  # Blue vertical line
+        cv2.line(roi, (six_x, 0), (six_x, roi.shape[0]), (255, 0, 0), 2)  # Blue vertical line
+        cv2.line(roi, (2*six_x, 0), (2*six_x, roi.shape[0]), (255, 0, 0), 2)  # Blue vertical line
+        cv2.line(roi, (4*six_x, 0), (4*six_x, roi.shape[0]), (255, 0, 0), 2)  # Blue vertical line
+        cv2.line(roi, (5*six_x, 0), (5*six_x, roi.shape[0]), (255, 0, 0), 2)  # Blue vertical line
+        
+        cuadrant = None
+        #detect in which cuadrant the object is
+        if bbox:
+            if center[0] < six_x:
+                cuadrant = 0
+                cv2.putText(roi, "First Cuadrant", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+            elif center[0] > six_x and center[0] < (2*six_x):
+                cuadrant = 1
+                cv2.putText(roi, "Second Cuadrant", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+            elif center[0] > (2*six_x) and center[0] < mid_x:
+                cuadrant = 2
+                cv2.putText(roi, "Third Cuadrant", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+            elif center[0] > mid_x and center[0] < (4*six_x):
+                cuadrant = 3
+                cv2.putText(roi, "Fourth Cuadrant", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+            elif center[0] > (4*six_x) and center[0] < (5*six_x):
+                cuadrant = 4
+                cv2.putText(roi, "Fifth Cuadrant", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+            else:
+                cuadrant = 5
+                cv2.putText(roi, "Sixth Cuadrant", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+                
+            # Display the frame
+            print("coordinates:", center, "cuadrant: ", cuadrant)
+            
+            update_quadrant_time(cuadrant)
+            
+            team_a_prob, team_b_prob = calculate_win_probabilities(time_in_cuadrants)
+            print(f"TEAM A Winning Probability: {team_a_prob * 100:.2f}%")
+            print(f"TEAM B Winning Probability: {team_b_prob * 100:.2f}%")
+        
+        
+
+        
+        
         cv2.imshow("Purple Object Detection", roi)
 
     # Exit if 'q' is pressed
