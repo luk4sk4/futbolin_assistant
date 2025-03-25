@@ -118,7 +118,7 @@ def detect_purple_object(frame):
 # Function to run OpenCV processing in a separate thread
 def opencv_thread_func():
     global frame
-    cap = cv2.VideoCapture(0)  # Use 0 for the default camera
+    cap = cv2.VideoCapture(1)  # Use 0 for the default camera
 
     cv2.namedWindow("Frame")
     cv2.setMouseCallback("Frame", select_roi)
