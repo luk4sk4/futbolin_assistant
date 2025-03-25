@@ -1,6 +1,10 @@
 import cv2
 import numpy as np
 import time
+import tkinter as tk
+from tkinter import ttk
+import threading
+import queue
 
 start_time = time.time()
 
@@ -10,13 +14,43 @@ frame = None  # Initialize frame variable
 probability = 50
 time_in_cuadrants = [250, 250, 250, 250, 250, 250]
 goals = [0, 0]
+team_a_prob, team_b_prob = 50, 50
 
+# Function to simulate updating variables in a worker thread
+def worker_thread_func(data_queue, ):
+    while True:
+        # Simulate updating variables
+        time_elapsed = f"{int(time.time() - start_time) // 60:02d}:{int(time.time() - start_time) % 60:02d}"
+        
+        global team_a_prob, team_b_prob, goals
+
+        # Put the updated data in the queue
+        data_queue.put((goals, time_elapsed, team_a_prob, team_b_prob))
+
+        # Simulate a delay (e.g., 1 second)
+        time.sleep(1)
+
+# Function to update the GUI with data from the queue
+def update_gui():
+    try:
+        # Get the latest data from the queue
+        goals, time_elapsed, team_a_prob, team_b_prob = data_queue.get_nowait()
+
+        # Update the labels
+        goal_a_label.config(text=f"{goals[0]}")
+        goal_b_label.config(text=f"{goals[1]}")
+        time_label.config(text=f"{time_elapsed}")
+        team_a_prob_label.config(text=f"{team_a_prob:.2f}%")
+        team_b_prob_label.config(text=f"{team_b_prob:.2f}%")
+    except queue.Empty:
+        pass  # No new data in the queue
+
+    # Schedule the next update
+    root.after(100, update_gui)  # Check the queue every 100 ms
 
 # Function to update quadrant time
 def update_quadrant_time(quadrant):
     global time_in_cuadrants
-    
-    
     time_in_cuadrants[quadrant] += 1
 
 # Function to calculate winning probabilities
@@ -25,22 +59,19 @@ def calculate_win_probabilities(time_in_cuadrants):
     if total_time == 0:
         return 0.5, 0.5  # Default to equal probability if no time has passed
 
-
     # Calculate ponderated time for each team (1 for forwards, 0.5 for backwards and midfielders)
-    
     team_a_ponderated = time_in_cuadrants[0] * 0.5 + time_in_cuadrants[2] * 0.5 + time_in_cuadrants[4] * 1
     team_b_ponderated = time_in_cuadrants[5] * 0.5 + time_in_cuadrants[3] * 0.5 + time_in_cuadrants[1] * 1
     total_ponderated = team_a_ponderated + team_b_ponderated
 
-    a_modification = 1+1/10*goals[0]-1/10*goals[1]+1/10*goals[0]*goals[0]-1/10*goals[1]*goals[1]
-    b_modification = 1+1/10*goals[1]-1/10*goals[0]+1/10*goals[1]*goals[1]-1/10*goals[0]*goals[0]
-    
+    a_modification = 1 + 1/10 * goals[0] - 1/10 * goals[1] + 1/10 * goals[0] * goals[0] - 1/10 * goals[1] * goals[1]
+    b_modification = 1 + 1/10 * goals[1] - 1/10 * goals[0] + 1/10 * goals[1] * goals[1] - 1/10 * goals[0] * goals[0]
+
     print(a_modification, b_modification, team_a_ponderated, team_b_ponderated, total_ponderated)
     # Calculate probabilities
-    team_a_prob =  (team_a_ponderated * a_modification / total_ponderated) 
-    team_b_prob =  (team_b_ponderated * b_modification / total_ponderated)
-    
-    
+    team_a_prob = (team_a_ponderated * a_modification / total_ponderated) * 100
+    team_b_prob = (team_b_ponderated * b_modification / total_ponderated) * 100
+
     print(team_a_prob, team_b_prob, team_a_ponderated * a_modification, team_b_ponderated * b_modification)
 
     return team_a_prob, team_b_prob
@@ -57,7 +88,7 @@ def select_roi(event, x, y, flags, param):
         roi_coordinates.append((x, y))  # End point
         cv2.rectangle(frame, roi_coordinates[0], roi_coordinates[1], (0, 255, 0), 2)
         cv2.imshow("Frame", frame)
-        
+
 # Function to detect the purple object
 def detect_purple_object(frame):
     # Convert the frame to HSV color space
@@ -84,105 +115,165 @@ def detect_purple_object(frame):
     else:
         return None
 
-# Initialize the video capture
-cap = cv2.VideoCapture(0)  # Use 0 for the default camera
+# Function to run OpenCV processing in a separate thread
+def opencv_thread_func():
+    global frame
+    cap = cv2.VideoCapture(0)  # Use 0 for the default camera
 
-cv2.namedWindow("Frame")
-cv2.setMouseCallback("Frame", select_roi)
+    cv2.namedWindow("Frame")
+    cv2.setMouseCallback("Frame", select_roi)
 
-while True:
-    ret, frame = cap.read()
-    if not ret:
-        break
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
 
-    # Display the frame
-    cv2.imshow("Frame", frame)
+        # Display the frame
+        cv2.imshow("Frame", frame)
 
-    # If ROI is selected, extract and display it
-    if len(roi_coordinates) == 2:
-        x1, y1 = roi_coordinates[0]
-        x2, y2 = roi_coordinates[1]
-        roi = frame[min(y1, y2):max(y1, y2), min(x1, x2):max(x1, x2)]
+        # If ROI is selected, extract and display it
+        if len(roi_coordinates) == 2:
+            x1, y1 = roi_coordinates[0]
+            x2, y2 = roi_coordinates[1]
+            roi = frame[min(y1, y2):max(y1, y2), min(x1, x2):max(x1, x2)]
 
-        # Detect the purple object in the frame
-        bbox = detect_purple_object(roi)
+            # Detect the purple object in the frame
+            bbox = detect_purple_object(roi)
 
-        # If a purple object is detected, draw a bounding box around it
-        if bbox:
-            x, y, w, h = bbox
-            cv2.rectangle(roi, (x, y), (x + w, y + h), (0, 255, 0), 2)  # Green bounding box
-            center = (x + w // 2, y + h // 2)  # Center of the bounding box
-            cv2.circle(roi, center, 2, (0, 255, 0), -1)  # Green dot
+            # If a purple object is detected, draw a bounding box around it
+            if bbox:
+                x, y, w, h = bbox
+                cv2.rectangle(roi, (x, y), (x + w, y + h), (0, 255, 0), 2)  # Green bounding box
+                center = (x + w // 2, y + h // 2)  # Center of the bounding box
+                cv2.circle(roi, center, 2, (0, 255, 0), -1)  # Green dot
+
+            # Calculate the midpoint of the ROI
+            mid_x = roi.shape[1] // 2  # Middle x-coordinate
+            six_x = roi.shape[1] // 6  # Second x-coordinate
+            mid_y = roi.shape[0] // 2  # Middle y-coordinate
+
+            # Draw vertical lines in the ROI
+            cv2.line(roi, (mid_x, 0), (mid_x, roi.shape[0]), (255, 0, 0), 2)  # Blue vertical line
+            cv2.line(roi, (six_x, 0), (six_x, roi.shape[0]), (255, 0, 0), 2)  # Blue vertical line
+            cv2.line(roi, (2 * six_x, 0), (2 * six_x, roi.shape[0]), (255, 0, 0), 2)  # Blue vertical line
+            cv2.line(roi, (4 * six_x, 0), (4 * six_x, roi.shape[0]), (255, 0, 0), 2)  # Blue vertical line
+            cv2.line(roi, (5 * six_x, 0), (5 * six_x, roi.shape[0]), (255, 0, 0), 2)  # Blue vertical line
+
+            cuadrant = None
+            # Detect in which quadrant the object is
+            if bbox:
+                if center[0] < six_x:
+                    cuadrant = 0
+                    cv2.putText(roi, "First Cuadrant", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+                elif center[0] > six_x and center[0] < (2 * six_x):
+                    cuadrant = 1
+                    cv2.putText(roi, "Second Cuadrant", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+                elif center[0] > (2 * six_x) and center[0] < mid_x:
+                    cuadrant = 2
+                    cv2.putText(roi, "Third Cuadrant", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+                elif center[0] > mid_x and center[0] < (4 * six_x):
+                    cuadrant = 3
+                    cv2.putText(roi, "Fourth Cuadrant", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+                elif center[0] > (4 * six_x) and center[0] < (5 * six_x):
+                    cuadrant = 4
+                    cv2.putText(roi, "Fifth Cuadrant", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+                else:
+                    cuadrant = 5
+                    cv2.putText(roi, "Sixth Cuadrant", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+
+                # Display the frame
+                print("coordinates:", center, "cuadrant: ", cuadrant)
+
+                update_quadrant_time(cuadrant)
+
+                global team_a_prob, team_b_prob, goals, start_time, time_in_cuadrants
+                team_a_prob, team_b_prob = calculate_win_probabilities(time_in_cuadrants)
+
+                print("goals: ", goals)
+
+            cv2.imshow("Purple Object Detection", roi)
+
+        # Exit if 'q' is pressed
+        key = cv2.waitKey(1) & 0xFF
+
+        # Update goals based on key press
+        if key == ord('1'):
+            goals[0] += 1
+            print("GOAL TEAM A")
+        elif key == ord('2'):
+            goals[1] += 1
+            print("GOAL TEAM B")
+        elif key == ord('0'):
             
-        # Calculate the midpoint of the ROI
-        mid_x = roi.shape[1] // 2  # Middle x-coordinate
-        six_x = roi.shape[1] // 6 # Second x-coordinate
-        mid_y = roi.shape[0] // 2  # Middle y-coordinate
-
-        # Draw a vertical line in the middle of the ROI
-        cv2.line(roi, (mid_x, 0), (mid_x, roi.shape[0]), (255, 0, 0), 2)  # Blue vertical line
-        cv2.line(roi, (six_x, 0), (six_x, roi.shape[0]), (255, 0, 0), 2)  # Blue vertical line
-        cv2.line(roi, (2*six_x, 0), (2*six_x, roi.shape[0]), (255, 0, 0), 2)  # Blue vertical line
-        cv2.line(roi, (4*six_x, 0), (4*six_x, roi.shape[0]), (255, 0, 0), 2)  # Blue vertical line
-        cv2.line(roi, (5*six_x, 0), (5*six_x, roi.shape[0]), (255, 0, 0), 2)  # Blue vertical line
-        
-        cuadrant = None
-        #detect in which cuadrant the object is
-        if bbox:
-            if center[0] < six_x:
-                cuadrant = 0
-                cv2.putText(roi, "First Cuadrant", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-            elif center[0] > six_x and center[0] < (2*six_x):
-                cuadrant = 1
-                cv2.putText(roi, "Second Cuadrant", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-            elif center[0] > (2*six_x) and center[0] < mid_x:
-                cuadrant = 2
-                cv2.putText(roi, "Third Cuadrant", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-            elif center[0] > mid_x and center[0] < (4*six_x):
-                cuadrant = 3
-                cv2.putText(roi, "Fourth Cuadrant", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-            elif center[0] > (4*six_x) and center[0] < (5*six_x):
-                cuadrant = 4
-                cv2.putText(roi, "Fifth Cuadrant", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-            else:
-                cuadrant = 5
-                cv2.putText(roi, "Sixth Cuadrant", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-                
-            # Display the frame
-            print("coordinates:", center, "cuadrant: ", cuadrant)
             
-            update_quadrant_time(cuadrant)
             
-            team_a_prob, team_b_prob = calculate_win_probabilities(time_in_cuadrants)
-            print(f"TEAM A Winning Probability: {team_a_prob * 100:.2f}%")
-            print(f"TEAM B Winning Probability: {team_b_prob * 100:.2f}%")
+            #save data to a file
+            with open("../data/match_data.txt", "a") as file:  # Use "a" to append to the file
+                file.write(f"Time: {int(time.time() - start_time) // 60:02d}:{int(time.time() - start_time) % 60:02d}\n")
+                file.write(f"Goals: Team A - {goals[0]}, Team B - {goals[1]}\n")
+                file.write(f"Time in Cuadrants: {time_in_cuadrants}\n")
+                file.write("-" * 40 + "\n")  # Separator for each game
             
-            print("goals: ", goals)
-        
-        
+            
+            goals = [0, 0]
+            time_in_cuadrants = [250, 250, 250, 250, 250, 250]
+            team_a_prob, team_b_prob = 50, 50
+            start_time = time.time()
+            
+            
+            print("reset")
+        elif key == ord('q'):
+            break
 
-        
-        
-        cv2.imshow("Purple Object Detection", roi)
-        #show a screen with the varaibles GOAL, TIME, TEAM_A_PROB AND TEAM_B_PROB withou using cv2.imshow
-        
+    # Release the video capture and close all windows
+    cap.release()
+    cv2.destroyAllWindows()
 
-    # Exit if 'q' is pressed
-    key = cv2.waitKey(1) & 0xFF
+# Create the main Tkinter window
+root = tk.Tk()
+root.title("Futbolín Match Stats")
+root.geometry("1100x800")  # Set window size
 
-    # Cambia la variable `modo` según la tecla presionada
-    if key == ord('1'):
-        goals[0] += 1
-        print("GOAL TEAM A")
-    elif key == ord('2'):
-        goals[1] += 1
-        print("GOAL TEAM B")
-    elif key == ord('0'):
-        goals = [0, 0]
-        print("reset")
-    elif key == ord('q'):
-        break
+# Create a queue to share data between threads
+data_queue = queue.Queue()
 
-# Release the video capture and close all windows
-cap.release()
-cv2.destroyAllWindows()
+# Create and style labels
+style = ttk.Style()
+style.configure("TLabel", font=("Arial", 100), background="#f0f0f0", foreground="#333333", padding=10)
+
+time_label = ttk.Label(root, text="00:00", style="TLabel")
+time_label.grid(row=0, column=0, columnspan=3, pady=10)
+
+nameA_label = ttk.Label(root, text="TEAM A", style="TLabel")
+nameA_label.grid(row=1, column=0, padx=20)
+
+goal_a_label = ttk.Label(root, text="0", style="TLabel")
+goal_a_label.grid(row=2, column=0, padx=20)
+
+nameB_label = ttk.Label(root, text="TEAM B", style="TLabel")
+nameB_label.grid(row=1, column=2, padx=20)
+
+goal_b_label = ttk.Label(root, text="0", style="TLabel")
+goal_b_label.grid(row=2, column=2, padx=20)
+
+team_a_prob_label = ttk.Label(root, text="50.00%", style="TLabel")
+team_a_prob_label.grid(row=3, column=0, padx=20)
+
+team_b_prob_label = ttk.Label(root, text="50.00%", style="TLabel")
+team_b_prob_label.grid(row=3, column=2, padx=20)
+
+# Start the worker thread
+worker_thread = threading.Thread(target=worker_thread_func, args=(data_queue, ))
+worker_thread.daemon = True  # Daemonize the thread so it exits when the main program exits
+worker_thread.start()
+
+# Start the OpenCV thread
+opencv_thread = threading.Thread(target=opencv_thread_func)
+opencv_thread.daemon = True  # Daemonize the thread so it exits when the main program exits
+opencv_thread.start()
+
+# Start updating the GUI
+root.after(100, update_gui)  # Initial call to start the update loop
+
+# Run the Tkinter event loop
+root.mainloop()
