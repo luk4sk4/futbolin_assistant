@@ -17,6 +17,30 @@ time_in_cuadrants = [250, 250, 250, 250, 250, 250]
 goals = [0, 0]
 team_a_prob, team_b_prob = 50, 50
 
+def increment_goal_a(event):
+    print("GOLA")
+    goals[0] += 1
+    
+def increment_goal_b(event):
+    goals[1] += 1
+
+def finish_match():
+    global goals, time_in_cuadrants, team_a_prob, team_b_prob, start_time
+    with open("../data/match_data.txt", "a") as file:  # Use "a" to append to the file
+                file.write(f"Time: {int(time.time() - start_time) // 60:02d}:{int(time.time() - start_time) % 60:02d}\n")
+                file.write(f"Goals: Team A - {goals[0]}, Team B - {goals[1]}\n")
+                file.write(f"Time in Cuadrants: {time_in_cuadrants}\n")
+                #i need to save the players names
+                file.write(f"Players team A: {dropdown_var1.get()}, {dropdown_var2.get()}. Players team B:{dropdown_var3.get()}, {dropdown_var4.get()}\n")
+                file.write("-" * 40 + "\n")  # Separator for each game
+            
+    goals = [0, 0]
+    time_in_cuadrants = [250, 250, 250, 250, 250, 250]
+    team_a_prob, team_b_prob = 50, 50
+    start_time = time.time()            
+    print("reset")
+
+
 
 def add_player(event=None):  # Added event=None to make it callable without event
     new_player = new_player_entry.get().strip()  # Added strip() to remove whitespace
@@ -59,8 +83,13 @@ def worker_thread_func(data_queue, ):
 # Function to update the GUI with data from the queue
 def update_gui():
     try:
-        # Get the latest data from the queue
         goals, time_elapsed, team_a_prob, team_b_prob = data_queue.get_nowait()
+
+        
+        if goals[0] == 3 or goals[1] == 3:
+            finish_match()
+        
+        # Get the latest data from the queue
 
         # Update the labels
         goal_a_label.config(text=f"{goals[0]}")
@@ -224,28 +253,12 @@ def opencv_thread_func():
 
         # Update goals based on key press
         if key == ord('1'):
-            goals[0] += 1
-            print("GOAL TEAM A")
+            increment_goal_a
         elif key == ord('2'):
-            goals[1] += 1
-            print("GOAL TEAM B")
+            increment_goal_b
         elif key == ord('0'):
             #save data to a file
-            with open("../data/match_data.txt", "a") as file:  # Use "a" to append to the file
-                file.write(f"Time: {int(time.time() - start_time) // 60:02d}:{int(time.time() - start_time) % 60:02d}\n")
-                file.write(f"Goals: Team A - {goals[0]}, Team B - {goals[1]}\n")
-                file.write(f"Time in Cuadrants: {time_in_cuadrants}\n")
-                #i need to save the players names
-                file.write(f"Players team A: {dropdown_var1.get()}, {dropdown_var2.get()}. Players team B:{dropdown_var3.get()}, {dropdown_var4.get()}\n")
-                file.write("-" * 40 + "\n")  # Separator for each game
-            
-            goals = [0, 0]
-            time_in_cuadrants = [250, 250, 250, 250, 250, 250]
-            team_a_prob, team_b_prob = 50, 50
-            start_time = time.time()
-            
-            
-            print("reset")
+            finish_match()
         elif key == ord('q'):
             break
 
@@ -290,14 +303,17 @@ dropdown2['values'] = ["delantero"] + all_values  # Include "defensa" as an opti
 dropdown2['state'] = 'readonly'  # Make it read-only
 dropdown2.grid(row=3, column=0, padx=20, pady=10)
 
+# make it so that if i press the goals label it adds a goal to the team
 goal_a_label = ttk.Label(root, text="0", style="TLabel")
 goal_a_label.grid(row=2, rowspan=2, column=1, padx=20)
+goal_a_label.bind("<Button-1>", increment_goal_a)
 
 nameB_label = ttk.Label(root, text="TEAM B", style="TLabel")
 nameB_label.grid(row=1, column=2, columnspan=2, padx=20)
 
 goal_b_label = ttk.Label(root, text="0", style="TLabel")
 goal_b_label.grid(row=2, rowspan=2, column=2, padx=20)
+goal_a_label.bind("<Button-2>", increment_goal_b)
 
 dropdown_var3 = tk.StringVar(value="defensa")  # Default value is "defensa"
 dropdown3 = ttk.Combobox(root, textvariable=dropdown_var3, font=("Arial", 20), justify="center")
