@@ -5,6 +5,7 @@ import tkinter as tk
 from tkinter import ttk
 import threading
 import queue
+import os
 
 start_time = time.time()
 
@@ -15,6 +16,31 @@ probability = 50
 time_in_cuadrants = [250, 250, 250, 250, 250, 250]
 goals = [0, 0]
 team_a_prob, team_b_prob = 50, 50
+
+
+def add_player(event=None):  # Added event=None to make it callable without event
+    new_player = new_player_entry.get().strip()  # Added strip() to remove whitespace
+    if new_player and new_player not in all_values:
+        all_values.append(new_player)
+        try:
+            with open("../data/players.txt", "a") as file:
+                file.write("\n" + new_player)  # Add a newline before the new player
+        except FileNotFoundError:
+            # Handle case where directory doesn't exist
+            os.makedirs("../data", exist_ok=True)
+            with open("../data/players.txt", "a") as file:
+                file.write("\n" + new_player)  # Add a newline before the new player
+        
+        # Update dropdown values
+        updated_values = ["defensa", "delantero"] + all_values  # Common base values
+        dropdown1['values'] = updated_values
+        dropdown2['values'] = updated_values
+        dropdown3['values'] = updated_values
+        dropdown4['values'] = updated_values
+        
+        new_player_entry.delete(0, tk.END)  # Clear the entry field
+
+
 
 # Function to simulate updating variables in a worker thread
 def worker_thread_func(data_queue, ):
@@ -118,7 +144,7 @@ def detect_purple_object(frame):
 # Function to run OpenCV processing in a separate thread
 def opencv_thread_func():
     global frame
-    cap = cv2.VideoCapture(1)  # Use 0 for the default camera
+    cap = cv2.VideoCapture(0)  # Use 0 for the default camera
 
     cv2.namedWindow("Frame")
     cv2.setMouseCallback("Frame", select_roi)
@@ -204,16 +230,14 @@ def opencv_thread_func():
             goals[1] += 1
             print("GOAL TEAM B")
         elif key == ord('0'):
-            
-            
-            
             #save data to a file
             with open("../data/match_data.txt", "a") as file:  # Use "a" to append to the file
                 file.write(f"Time: {int(time.time() - start_time) // 60:02d}:{int(time.time() - start_time) % 60:02d}\n")
                 file.write(f"Goals: Team A - {goals[0]}, Team B - {goals[1]}\n")
                 file.write(f"Time in Cuadrants: {time_in_cuadrants}\n")
+                #i need to save the players names
+                file.write(f"Players team A: {dropdown_var1.get()}, {dropdown_var2.get()}. Players team B:{dropdown_var3.get()}, {dropdown_var4.get()}\n")
                 file.write("-" * 40 + "\n")  # Separator for each game
-            
             
             goals = [0, 0]
             time_in_cuadrants = [250, 250, 250, 250, 250, 250]
@@ -229,6 +253,13 @@ def opencv_thread_func():
     cap.release()
     cv2.destroyAllWindows()
 
+
+#all values is the list of values saved on /data/players.txt
+all_values = []
+with open("../data/players.txt", "r") as file:
+    for line in file:
+        all_values.append(line.strip())  # Remove newline characters and spaces
+
 # Create the main Tkinter window
 root = tk.Tk()
 root.title("Futbolín Match Stats")
@@ -242,25 +273,61 @@ style = ttk.Style()
 style.configure("TLabel", font=("Arial", 100), background="#f0f0f0", foreground="#333333", padding=10)
 
 time_label = ttk.Label(root, text="00:00", style="TLabel")
-time_label.grid(row=0, column=0, columnspan=3, pady=10)
+time_label.grid(row=0, column=0, columnspan=4, pady=10)
 
 nameA_label = ttk.Label(root, text="TEAM A", style="TLabel")
-nameA_label.grid(row=1, column=0, padx=20)
+nameA_label.grid(row=1, column=0, columnspan=2, padx=20)
+
+dropdown_var1 = tk.StringVar(value="defensa")  # Default value is "defensa"
+dropdown1 = ttk.Combobox(root, textvariable=dropdown_var1, font=("Arial", 20), justify="center")
+dropdown1['values'] = ["defensa"] + all_values  # Include "defensa" as an option
+dropdown1['state'] = 'readonly'  # Make it read-only
+dropdown1.grid(row=2, column=0, padx=20, pady=10)
+
+dropdown_var2 = tk.StringVar(value="delantero")  # Default value is "defensa"
+dropdown2 = ttk.Combobox(root, textvariable=dropdown_var2, font=("Arial", 20), justify="center")
+dropdown2['values'] = ["delantero"] + all_values  # Include "defensa" as an option
+dropdown2['state'] = 'readonly'  # Make it read-only
+dropdown2.grid(row=3, column=0, padx=20, pady=10)
 
 goal_a_label = ttk.Label(root, text="0", style="TLabel")
-goal_a_label.grid(row=2, column=0, padx=20)
+goal_a_label.grid(row=2, rowspan=2, column=1, padx=20)
 
 nameB_label = ttk.Label(root, text="TEAM B", style="TLabel")
-nameB_label.grid(row=1, column=2, padx=20)
+nameB_label.grid(row=1, column=2, columnspan=2, padx=20)
 
 goal_b_label = ttk.Label(root, text="0", style="TLabel")
-goal_b_label.grid(row=2, column=2, padx=20)
+goal_b_label.grid(row=2, rowspan=2, column=2, padx=20)
+
+dropdown_var3 = tk.StringVar(value="defensa")  # Default value is "defensa"
+dropdown3 = ttk.Combobox(root, textvariable=dropdown_var3, font=("Arial", 20), justify="center")
+dropdown3['values'] = ["defensa"] + all_values  # Include "defensa" as an option
+dropdown3['state'] = 'readonly'  # Make it read-only
+dropdown3.grid(row=2, column=3, padx=20, pady=10)
+
+dropdown_var4 = tk.StringVar(value="delantero")  # Default value is "defensa"
+dropdown4 = ttk.Combobox(root, textvariable=dropdown_var4, font=("Arial", 20), justify="center")
+dropdown4['values'] = ["delantero"] + all_values  # Include "defensa" as an option
+dropdown4['state'] = 'readonly'  # Make it read-only
+dropdown4.grid(row=3, column=3, padx=20, pady=10)
 
 team_a_prob_label = ttk.Label(root, text="50.00%", style="TLabel")
-team_a_prob_label.grid(row=3, column=0, padx=20)
+team_a_prob_label.grid(row=4, column=0, columnspan=2, padx=20)
 
 team_b_prob_label = ttk.Label(root, text="50.00%", style="TLabel")
-team_b_prob_label.grid(row=3, column=2, padx=20)
+team_b_prob_label.grid(row=4, column=2, columnspan=2, padx=20)
+
+new_player_label = ttk.Label(root, text="Add Player:", font=("Arial", 20))
+new_player_label.grid(row=5, column=0, padx=20, pady=10)
+
+# Add the place where you can write the name of the player
+new_player_entry = ttk.Entry(root, font=("Arial", 20))
+new_player_entry.grid(row=5, column=1, padx=20, pady=10)
+
+# Bind the Enter key to the add_player function
+new_player_entry.bind('<Return>', add_player)
+
+
 
 # Start the worker thread
 worker_thread = threading.Thread(target=worker_thread_func, args=(data_queue, ))
